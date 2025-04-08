@@ -1,0 +1,682 @@
+<!DOCTYPE html>
+
+<html>
+<head>
+  <title>A precedence climbing parser in Python</title>
+  <meta http-equiv="content-type" content="text/html; charset=UTF-8">
+  <meta name="viewport" content="width=device-width, target-densitydpi=160dpi, initial-scale=1.0; maximum-scale=1.0; user-scalable=0;">
+  <link rel="stylesheet" media="all" href="../docco.css" />
+</head>
+<body>
+  <div id="container">
+    <div id="background"></div>
+    
+      <ul id="jump_to">
+        <li>
+          <a class="large" href="javascript:void(0);">Jump To &hellip;</a>
+          <a class="small" href="javascript:void(0);">+</a>
+          <div id="jump_wrapper">
+          <div id="jump_page_wrapper">
+            <div id="jump_page">
+              
+                
+                <a class="source" href="../packrat-parsing/index.html">
+                  ./packrat-parsing/index.js
+                </a>
+              
+                
+                <a class="source" href="index.html">
+                  ./precedence-climbing/index.py
+                </a>
+              
+                
+                <a class="source" href="../relational-db/index.html">
+                  ./relational-db/index.py
+                </a>
+              
+                
+                <a class="source" href="../virtual-dom/index.html">
+                  ./virtual-dom/index.js
+                </a>
+              
+            </div>
+          </div>
+        </li>
+      </ul>
+    
+    <ul class="sections">
+        
+        
+        
+        <li id="section-1">
+            <div class="annotation">
+              
+              <div class="sswrap ">
+                <a class="ss" href="#section-1">&#x00a7;</a>
+              </div>
+              <h1 id="a-precedence-climbing-parser-in-python">A precedence climbing parser in Python</h1>
+<p><strong>License:</strong> MIT
+<strong>Copyright:</strong> (c) 2025 <a href="https://bernsteinbear.com">Maxwell Bernstein</a></p>
+
+            </div>
+            
+        </li>
+        
+        
+        <li id="section-2">
+            <div class="annotation">
+              
+              <div class="sswrap ">
+                <a class="ss" href="#section-2">&#x00a7;</a>
+              </div>
+              <p>A list of operators in groups of increasing precedence (tighter binding
+power). It doesn’t matter exactly what the precedence is, just that each
+entry within a group has the same precedence (+ and -, etc) and that each
+group is lower precedence than the next.</p>
+
+            </div>
+            
+            <div class="content"><div class='highlight'><pre>OPERATORS = [
+    [(<span class="hljs-string">&quot;+&quot;</span>, <span class="hljs-string">&quot;any&quot;</span>), (<span class="hljs-string">&quot;-&quot;</span>, <span class="hljs-string">&quot;left&quot;</span>)],
+    [(<span class="hljs-string">&quot;*&quot;</span>, <span class="hljs-string">&quot;any&quot;</span>), (<span class="hljs-string">&quot;/&quot;</span>, <span class="hljs-string">&quot;left&quot;</span>)],
+    [(<span class="hljs-string">&quot;^&quot;</span>, <span class="hljs-string">&quot;right&quot;</span>)],
+    [(<span class="hljs-string">&quot;(&quot;</span>, <span class="hljs-string">&quot;left&quot;</span>)],
+]</pre></div></div>
+            
+        </li>
+        
+        
+        <li id="section-3">
+            <div class="annotation">
+              
+              <div class="sswrap ">
+                <a class="ss" href="#section-3">&#x00a7;</a>
+              </div>
+              <p>Pull out the operator names from each entry.</p>
+
+            </div>
+            
+            <div class="content"><div class='highlight'><pre>OPERATOR_NAMES = [info[<span class="hljs-number">0</span>] <span class="hljs-keyword">for</span> group <span class="hljs-keyword">in</span> OPERATORS <span class="hljs-keyword">for</span> info <span class="hljs-keyword">in</span> group]
+
+
+<span class="hljs-keyword">class</span> <span class="hljs-title class_">ParseError</span>(<span class="hljs-title class_ inherited__">Exception</span>):
+    <span class="hljs-keyword">pass</span></pre></div></div>
+            
+        </li>
+        
+        
+        <li id="section-4">
+            <div class="annotation">
+              
+              <div class="sswrap ">
+                <a class="ss" href="#section-4">&#x00a7;</a>
+              </div>
+              <p>Turn an input string into a list of tokens.</p>
+
+            </div>
+            
+            <div class="content"><div class='highlight'><pre><span class="hljs-keyword">def</span> <span class="hljs-title function_">tokenize</span>(<span class="hljs-params">source: <span class="hljs-built_in">str</span></span>) -&gt; <span class="hljs-built_in">list</span>:
+    <span class="hljs-keyword">if</span> <span class="hljs-keyword">not</span> source.isascii():
+        <span class="hljs-keyword">raise</span> ParseError(<span class="hljs-string">&quot;Only ASCII characters are supported&quot;</span>)
+    result: <span class="hljs-built_in">list</span> = []</pre></div></div>
+            
+        </li>
+        
+        
+        <li id="section-5">
+            <div class="annotation">
+              
+              <div class="sswrap ">
+                <a class="ss" href="#section-5">&#x00a7;</a>
+              </div>
+              <p>We use an index to keep track of where we are in the input string.</p>
+
+            </div>
+            
+            <div class="content"><div class='highlight'><pre>    idx: <span class="hljs-built_in">int</span> = <span class="hljs-number">0</span>
+
+    <span class="hljs-keyword">def</span> <span class="hljs-title function_">at_end</span>() -&gt; <span class="hljs-built_in">bool</span>:
+        <span class="hljs-keyword">nonlocal</span> idx
+        <span class="hljs-keyword">return</span> idx &gt;= <span class="hljs-built_in">len</span>(source)</pre></div></div>
+            
+        </li>
+        
+        
+        <li id="section-6">
+            <div class="annotation">
+              
+              <div class="sswrap ">
+                <a class="ss" href="#section-6">&#x00a7;</a>
+              </div>
+              <p>Assuming we have characters left (not <code>at_end()</code>), pull out one character
+from the input string and advance the position.</p>
+
+            </div>
+            
+            <div class="content"><div class='highlight'><pre>    <span class="hljs-keyword">def</span> <span class="hljs-title function_">advance</span>() -&gt; <span class="hljs-built_in">str</span>:
+        <span class="hljs-keyword">nonlocal</span> idx
+        result = source[idx]
+        idx += <span class="hljs-number">1</span>
+        <span class="hljs-keyword">return</span> result</pre></div></div>
+            
+        </li>
+        
+        
+        <li id="section-7">
+            <div class="annotation">
+              
+              <div class="sswrap ">
+                <a class="ss" href="#section-7">&#x00a7;</a>
+              </div>
+              <p>Assuming we have characters left (not <code>at_end()</code>), look at the next one
+available without advancing the position.</p>
+
+            </div>
+            
+            <div class="content"><div class='highlight'><pre>    <span class="hljs-keyword">def</span> <span class="hljs-title function_">peek</span>() -&gt; <span class="hljs-built_in">str</span>:
+        <span class="hljs-keyword">nonlocal</span> idx
+        <span class="hljs-keyword">return</span> source[idx]
+
+    <span class="hljs-keyword">while</span> <span class="hljs-keyword">not</span> at_end():
+        c = advance()</pre></div></div>
+            
+        </li>
+        
+        
+        <li id="section-8">
+            <div class="annotation">
+              
+              <div class="sswrap ">
+                <a class="ss" href="#section-8">&#x00a7;</a>
+              </div>
+              <p>Skip all whitespace between tokens</p>
+
+            </div>
+            
+            <div class="content"><div class='highlight'><pre>        <span class="hljs-keyword">if</span> c.isspace():
+            <span class="hljs-keyword">continue</span></pre></div></div>
+            
+        </li>
+        
+        
+        <li id="section-9">
+            <div class="annotation">
+              
+              <div class="sswrap ">
+                <a class="ss" href="#section-9">&#x00a7;</a>
+              </div>
+              <p>Read a number and append it as an int</p>
+
+            </div>
+            
+            <div class="content"><div class='highlight'><pre>        <span class="hljs-keyword">if</span> c.isdigit():
+            num = <span class="hljs-built_in">int</span>(c)
+            <span class="hljs-keyword">while</span> <span class="hljs-keyword">not</span> at_end() <span class="hljs-keyword">and</span> peek().isdigit():
+                num = num * <span class="hljs-number">10</span> + <span class="hljs-built_in">int</span>(advance())
+            result.append(num)
+            <span class="hljs-keyword">continue</span></pre></div></div>
+            
+        </li>
+        
+        
+        <li id="section-10">
+            <div class="annotation">
+              
+              <div class="sswrap ">
+                <a class="ss" href="#section-10">&#x00a7;</a>
+              </div>
+              <p>Read an operator and append it as a string</p>
+
+            </div>
+            
+            <div class="content"><div class='highlight'><pre>        <span class="hljs-keyword">if</span> c <span class="hljs-keyword">in</span> OPERATOR_NAMES <span class="hljs-keyword">or</span> c <span class="hljs-keyword">in</span> <span class="hljs-string">&quot;()&quot;</span>:
+            result.append(c)
+            <span class="hljs-keyword">continue</span></pre></div></div>
+            
+        </li>
+        
+        
+        <li id="section-11">
+            <div class="annotation">
+              
+              <div class="sswrap ">
+                <a class="ss" href="#section-11">&#x00a7;</a>
+              </div>
+              <p>Read a variable name and append it as a string</p>
+
+            </div>
+            
+            <div class="content"><div class='highlight'><pre>        <span class="hljs-keyword">if</span> c.isalpha():
+            var = c
+            <span class="hljs-keyword">while</span> <span class="hljs-keyword">not</span> at_end() <span class="hljs-keyword">and</span> peek().isalpha():
+                var += advance()
+            result.append(var)
+            <span class="hljs-keyword">continue</span>
+        <span class="hljs-keyword">raise</span> ParseError(<span class="hljs-string">f&quot;Unexpected character: <span class="hljs-subst">{c}</span>&quot;</span>)
+    <span class="hljs-keyword">return</span> result</pre></div></div>
+            
+        </li>
+        
+        
+        <li id="section-12">
+            <div class="annotation">
+              
+              <div class="sswrap ">
+                <a class="ss" href="#section-12">&#x00a7;</a>
+              </div>
+              <p>Pull out the precedence for each entry by using its group’s index in
+<code>OPERATORS</code>. This gives operators <code>*</code> and <code>/</code> precendece 1, for example.</p>
+
+            </div>
+            
+            <div class="content"><div class='highlight'><pre>OPERATOR_PREC = {
+    info[<span class="hljs-number">0</span>]: idx <span class="hljs-keyword">for</span> (idx, group) <span class="hljs-keyword">in</span> <span class="hljs-built_in">enumerate</span>(OPERATORS) <span class="hljs-keyword">for</span> info <span class="hljs-keyword">in</span> group
+}</pre></div></div>
+            
+        </li>
+        
+        
+        <li id="section-13">
+            <div class="annotation">
+              
+              <div class="sswrap ">
+                <a class="ss" href="#section-13">&#x00a7;</a>
+              </div>
+              <p>Pull out the associativity for each entry.</p>
+
+            </div>
+            
+            <div class="content"><div class='highlight'><pre>OPERATOR_ASSOC = {info[<span class="hljs-number">0</span>]: info[<span class="hljs-number">1</span>] <span class="hljs-keyword">for</span> group <span class="hljs-keyword">in</span> OPERATORS <span class="hljs-keyword">for</span> info <span class="hljs-keyword">in</span> group}</pre></div></div>
+            
+        </li>
+        
+        
+        <li id="section-14">
+            <div class="annotation">
+              
+              <div class="sswrap ">
+                <a class="ss" href="#section-14">&#x00a7;</a>
+              </div>
+              <p>Precedence climbing is composed of a recursive function parse_ that also
+contains a loop. The loop is responsible for reading all tokens at or above
+the given precedence level. When it sees a token below the minimum required
+precedence, it drops down a precedence level by returning. Otherwise, it uses
+the current operator’s precedence as the minimum precedence for the next
+tokens (by recursively calling).</p>
+<p>This parser treats the <code>tokens</code> list as a mutable stream of tokens by doing
+<code>pop(0)</code> repeatedly. In a real parser, use a deque or stream and don’t
+actually pop from the front of a <code>list</code>.</p>
+
+            </div>
+            
+            <div class="content"><div class='highlight'><pre><span class="hljs-keyword">def</span> <span class="hljs-title function_">parse_</span>(<span class="hljs-params">tokens: <span class="hljs-built_in">list</span>, min_prec: <span class="hljs-built_in">int</span></span>):</pre></div></div>
+            
+        </li>
+        
+        
+        <li id="section-15">
+            <div class="annotation">
+              
+              <div class="sswrap ">
+                <a class="ss" href="#section-15">&#x00a7;</a>
+              </div>
+              <p>Atomic groups such as integers and parenthesized sub-expressions make up
+the left hand side of an expression.</p>
+
+            </div>
+            
+            <div class="content"><div class='highlight'><pre>    <span class="hljs-keyword">def</span> <span class="hljs-title function_">atom</span>():
+        <span class="hljs-keyword">if</span> <span class="hljs-keyword">not</span> tokens:
+            <span class="hljs-keyword">raise</span> ParseError(<span class="hljs-string">&quot;Unexpected end of input&quot;</span>)
+        token = tokens.pop(<span class="hljs-number">0</span>)
+        <span class="hljs-keyword">if</span> token == <span class="hljs-string">&quot;-&quot;</span>:</pre></div></div>
+            
+        </li>
+        
+        
+        <li id="section-16">
+            <div class="annotation">
+              
+              <div class="sswrap ">
+                <a class="ss" href="#section-16">&#x00a7;</a>
+              </div>
+              <p>We only support unary negation, not unary addition.</p>
+
+            </div>
+            
+            <div class="content"><div class='highlight'><pre>            <span class="hljs-keyword">return</span> [<span class="hljs-string">&quot;negate&quot;</span>, atom()]
+        <span class="hljs-keyword">if</span> token == <span class="hljs-string">&quot;(&quot;</span>:</pre></div></div>
+            
+        </li>
+        
+        
+        <li id="section-17">
+            <div class="annotation">
+              
+              <div class="sswrap ">
+                <a class="ss" href="#section-17">&#x00a7;</a>
+              </div>
+              <p>Parse a parenthesized expression.</p>
+
+            </div>
+            
+            <div class="content"><div class='highlight'><pre>            result = parse_(tokens, <span class="hljs-number">0</span>)
+            <span class="hljs-keyword">if</span> <span class="hljs-keyword">not</span> tokens <span class="hljs-keyword">or</span> tokens.pop(<span class="hljs-number">0</span>) != <span class="hljs-string">&quot;)&quot;</span>:
+                <span class="hljs-keyword">raise</span> ParseError(<span class="hljs-string">&quot;Expected closing parenthesis&quot;</span>)
+            <span class="hljs-keyword">return</span> result
+        <span class="hljs-keyword">if</span> token <span class="hljs-keyword">in</span> OPERATOR_NAMES:
+            <span class="hljs-keyword">raise</span> ParseError(<span class="hljs-string">f&quot;Unexpected operator: <span class="hljs-subst">{token}</span>&quot;</span>)
+        <span class="hljs-keyword">if</span> <span class="hljs-built_in">isinstance</span>(token, <span class="hljs-built_in">int</span>):
+            <span class="hljs-keyword">return</span> token
+        <span class="hljs-keyword">if</span> <span class="hljs-built_in">isinstance</span>(token, <span class="hljs-built_in">str</span>) <span class="hljs-keyword">and</span> token.isalpha():</pre></div></div>
+            
+        </li>
+        
+        
+        <li id="section-18">
+            <div class="annotation">
+              
+              <div class="sswrap ">
+                <a class="ss" href="#section-18">&#x00a7;</a>
+              </div>
+              <p>Return a variable name.</p>
+
+            </div>
+            
+            <div class="content"><div class='highlight'><pre>            <span class="hljs-keyword">return</span> token
+        <span class="hljs-keyword">raise</span> ParseError(<span class="hljs-string">f&quot;Unexpected token: <span class="hljs-subst">{token}</span>&quot;</span>)
+
+    lhs = atom()</pre></div></div>
+            
+        </li>
+        
+        
+        <li id="section-19">
+            <div class="annotation">
+              
+              <div class="sswrap ">
+                <a class="ss" href="#section-19">&#x00a7;</a>
+              </div>
+              <p>The main precedence climbing loop.</p>
+
+            </div>
+            
+            <div class="content"><div class='highlight'><pre>    <span class="hljs-keyword">while</span> tokens <span class="hljs-keyword">and</span> (token := tokens[<span class="hljs-number">0</span>]) <span class="hljs-keyword">in</span> OPERATOR_NAMES:
+        op_assoc = OPERATOR_ASSOC[token]
+        op_prec = OPERATOR_PREC[token]
+        <span class="hljs-keyword">if</span> op_prec &lt; min_prec:</pre></div></div>
+            
+        </li>
+        
+        
+        <li id="section-20">
+            <div class="annotation">
+              
+              <div class="sswrap ">
+                <a class="ss" href="#section-20">&#x00a7;</a>
+              </div>
+              <p>Drop a precedence level by returning.</p>
+
+            </div>
+            
+            <div class="content"><div class='highlight'><pre>            <span class="hljs-keyword">return</span> lhs
+        tokens.pop(<span class="hljs-number">0</span>)</pre></div></div>
+            
+        </li>
+        
+        
+        <li id="section-21">
+            <div class="annotation">
+              
+              <div class="sswrap ">
+                <a class="ss" href="#section-21">&#x00a7;</a>
+              </div>
+              <p>Special-case function application: the function argument can re-start
+the precedence climbing at precedence <code>0</code>.</p>
+
+            </div>
+            
+            <div class="content"><div class='highlight'><pre>        <span class="hljs-keyword">if</span> token == <span class="hljs-string">&quot;(&quot;</span>:</pre></div></div>
+            
+        </li>
+        
+        
+        <li id="section-22">
+            <div class="annotation">
+              
+              <div class="sswrap ">
+                <a class="ss" href="#section-22">&#x00a7;</a>
+              </div>
+              <p>You could optionally include an auxiliary function to parse a
+list of comma-separated arguments, but this simple parser expects
+exactly one argument.</p>
+
+            </div>
+            
+            <div class="content"><div class='highlight'><pre>            arg = parse_(tokens, <span class="hljs-number">0</span>)
+            <span class="hljs-keyword">if</span> <span class="hljs-keyword">not</span> tokens <span class="hljs-keyword">or</span> tokens.pop(<span class="hljs-number">0</span>) != <span class="hljs-string">&quot;)&quot;</span>:
+                <span class="hljs-keyword">raise</span> ParseError(<span class="hljs-string">&quot;Expected closing parenthesis in function call&quot;</span>)
+            lhs = [lhs, arg]
+            <span class="hljs-keyword">continue</span></pre></div></div>
+            
+        </li>
+        
+        
+        <li id="section-23">
+            <div class="annotation">
+              
+              <div class="sswrap ">
+                <a class="ss" href="#section-23">&#x00a7;</a>
+              </div>
+              <p>For left-associative operators such as <code>-</code> and <code>/</code>, bump up the
+minimum precedence by one. Don’t bump for any-associative operators
+such as <code>+</code> or right-associative operators such as <code>^</code>.</p>
+
+            </div>
+            
+            <div class="content"><div class='highlight'><pre>        next_prec = op_prec + <span class="hljs-number">1</span> <span class="hljs-keyword">if</span> op_assoc == <span class="hljs-string">&quot;left&quot;</span> <span class="hljs-keyword">else</span> op_prec
+        rhs = parse_(tokens, next_prec)</pre></div></div>
+            
+        </li>
+        
+        
+        <li id="section-24">
+            <div class="annotation">
+              
+              <div class="sswrap ">
+                <a class="ss" href="#section-24">&#x00a7;</a>
+              </div>
+              <p>This is where you could build an AST node instead of making a list.</p>
+
+            </div>
+            
+            <div class="content"><div class='highlight'><pre>        lhs = [token, lhs, rhs]
+    <span class="hljs-keyword">return</span> lhs
+
+
+<span class="hljs-keyword">def</span> <span class="hljs-title function_">parse</span>(<span class="hljs-params">tokens: <span class="hljs-built_in">list</span></span>):</pre></div></div>
+            
+        </li>
+        
+        
+        <li id="section-25">
+            <div class="annotation">
+              
+              <div class="sswrap ">
+                <a class="ss" href="#section-25">&#x00a7;</a>
+              </div>
+              <p>Start off with minimum precedence of <code>0</code>.</p>
+
+            </div>
+            
+            <div class="content"><div class='highlight'><pre>    result = parse_(tokens, <span class="hljs-number">0</span>)
+    <span class="hljs-keyword">if</span> tokens:</pre></div></div>
+            
+        </li>
+        
+        
+        <li id="section-26">
+            <div class="annotation">
+              
+              <div class="sswrap ">
+                <a class="ss" href="#section-26">&#x00a7;</a>
+              </div>
+              <p>If we have tokens left-over, that’s a syntax error.</p>
+
+            </div>
+            
+            <div class="content"><div class='highlight'><pre>        <span class="hljs-keyword">raise</span> ParseError(<span class="hljs-string">&quot;Unexpected tokens: &quot;</span> + <span class="hljs-string">&quot; &quot;</span>.join(<span class="hljs-built_in">map</span>(<span class="hljs-built_in">str</span>, tokens)))
+    <span class="hljs-keyword">return</span> result</pre></div></div>
+            
+        </li>
+        
+        
+        <li id="section-27">
+            <div class="annotation">
+              
+              <div class="sswrap ">
+                <a class="ss" href="#section-27">&#x00a7;</a>
+              </div>
+              <p>Also include a bunch of tests that push the entirety of the example over 200
+lines but are illustrative.</p>
+
+            </div>
+            
+            <div class="content"><div class='highlight'><pre><span class="hljs-keyword">import</span> re
+<span class="hljs-keyword">import</span> unittest
+
+
+<span class="hljs-keyword">class</span> <span class="hljs-title class_">TokenizerTests</span>(unittest.TestCase):
+    <span class="hljs-keyword">def</span> <span class="hljs-title function_">test_empty</span>(<span class="hljs-params">self</span>):
+        self.assertEqual(tokenize(<span class="hljs-string">&quot;&quot;</span>), [])
+
+    <span class="hljs-keyword">def</span> <span class="hljs-title function_">test_digit</span>(<span class="hljs-params">self</span>):
+        self.assertEqual(tokenize(<span class="hljs-string">&quot;1&quot;</span>), [<span class="hljs-number">1</span>])
+
+    <span class="hljs-keyword">def</span> <span class="hljs-title function_">test_number</span>(<span class="hljs-params">self</span>):
+        self.assertEqual(tokenize(<span class="hljs-string">&quot;123&quot;</span>), [<span class="hljs-number">123</span>])
+
+    <span class="hljs-keyword">def</span> <span class="hljs-title function_">test_add</span>(<span class="hljs-params">self</span>):
+        self.assertEqual(tokenize(<span class="hljs-string">&quot;+&quot;</span>), [<span class="hljs-string">&quot;+&quot;</span>])
+
+    <span class="hljs-keyword">def</span> <span class="hljs-title function_">test_sub</span>(<span class="hljs-params">self</span>):
+        self.assertEqual(tokenize(<span class="hljs-string">&quot;-&quot;</span>), [<span class="hljs-string">&quot;-&quot;</span>])
+
+    <span class="hljs-keyword">def</span> <span class="hljs-title function_">test_sub</span>(<span class="hljs-params">self</span>):
+        self.assertEqual(tokenize(<span class="hljs-string">&quot;-&quot;</span>), [<span class="hljs-string">&quot;-&quot;</span>])
+
+    <span class="hljs-keyword">def</span> <span class="hljs-title function_">test_mul</span>(<span class="hljs-params">self</span>):
+        self.assertEqual(tokenize(<span class="hljs-string">&quot;*&quot;</span>), [<span class="hljs-string">&quot;*&quot;</span>])
+
+    <span class="hljs-keyword">def</span> <span class="hljs-title function_">test_div</span>(<span class="hljs-params">self</span>):
+        self.assertEqual(tokenize(<span class="hljs-string">&quot;/&quot;</span>), [<span class="hljs-string">&quot;/&quot;</span>])
+
+    <span class="hljs-keyword">def</span> <span class="hljs-title function_">test_pow</span>(<span class="hljs-params">self</span>):
+        self.assertEqual(tokenize(<span class="hljs-string">&quot;^&quot;</span>), [<span class="hljs-string">&quot;^&quot;</span>])
+
+    <span class="hljs-keyword">def</span> <span class="hljs-title function_">test_unrecognized_operator</span>(<span class="hljs-params">self</span>):
+        <span class="hljs-keyword">with</span> self.assertRaises(ParseError):
+            tokenize(<span class="hljs-string">&quot;%&quot;</span>)
+
+    <span class="hljs-keyword">def</span> <span class="hljs-title function_">test_var</span>(<span class="hljs-params">self</span>):
+        self.assertEqual(tokenize(<span class="hljs-string">&quot;a&quot;</span>), [<span class="hljs-string">&quot;a&quot;</span>])
+        self.assertEqual(tokenize(<span class="hljs-string">&quot;abc&quot;</span>), [<span class="hljs-string">&quot;abc&quot;</span>])
+
+
+<span class="hljs-keyword">class</span> <span class="hljs-title class_">ParseTests</span>(unittest.TestCase):
+    <span class="hljs-keyword">def</span> <span class="hljs-title function_">assert_parse_error</span>(<span class="hljs-params">self, message</span>):
+        <span class="hljs-keyword">return</span> self.assertRaisesRegex(ParseError, re.escape(message))
+
+    <span class="hljs-keyword">def</span> <span class="hljs-title function_">test_empty</span>(<span class="hljs-params">self</span>):
+        <span class="hljs-keyword">with</span> self.assert_parse_error(<span class="hljs-string">&quot;Unexpected end of input&quot;</span>):
+            parse([])
+
+    <span class="hljs-keyword">def</span> <span class="hljs-title function_">test_const</span>(<span class="hljs-params">self</span>) -&gt; <span class="hljs-literal">None</span>:
+        self.assertEqual(parse([<span class="hljs-number">3</span>]), <span class="hljs-number">3</span>)
+
+    <span class="hljs-keyword">def</span> <span class="hljs-title function_">test_var</span>(<span class="hljs-params">self</span>) -&gt; <span class="hljs-literal">None</span>:
+        self.assertEqual(parse([<span class="hljs-string">&quot;abc&quot;</span>]), <span class="hljs-string">&quot;abc&quot;</span>)
+
+    <span class="hljs-keyword">def</span> <span class="hljs-title function_">test_const_leftover_raises</span>(<span class="hljs-params">self</span>) -&gt; <span class="hljs-literal">None</span>:
+        <span class="hljs-keyword">with</span> self.assert_parse_error(<span class="hljs-string">&quot;Unexpected tokens: 4 5&quot;</span>):
+            parse([<span class="hljs-number">3</span>, <span class="hljs-number">4</span>, <span class="hljs-number">5</span>])
+
+    <span class="hljs-keyword">def</span> <span class="hljs-title function_">test_const_paren</span>(<span class="hljs-params">self</span>) -&gt; <span class="hljs-literal">None</span>:
+        self.assertEqual(parse([<span class="hljs-string">&quot;(&quot;</span>, <span class="hljs-number">3</span>, <span class="hljs-string">&quot;)&quot;</span>]), <span class="hljs-number">3</span>)
+
+    <span class="hljs-keyword">def</span> <span class="hljs-title function_">test_const_paren_missing</span>(<span class="hljs-params">self</span>) -&gt; <span class="hljs-literal">None</span>:
+        <span class="hljs-keyword">with</span> self.assert_parse_error(<span class="hljs-string">&quot;Expected closing parenthesis&quot;</span>):
+            parse([<span class="hljs-string">&quot;(&quot;</span>, <span class="hljs-number">3</span>])
+
+        <span class="hljs-keyword">with</span> self.assert_parse_error(<span class="hljs-string">&quot;Unexpected tokens: )&quot;</span>):
+            parse([<span class="hljs-number">3</span>, <span class="hljs-string">&quot;)&quot;</span>])
+
+    <span class="hljs-keyword">def</span> <span class="hljs-title function_">test_call_fun</span>(<span class="hljs-params">self</span>) -&gt; <span class="hljs-literal">None</span>:
+        self.assertEqual(parse([<span class="hljs-string">&quot;f&quot;</span>, <span class="hljs-string">&quot;(&quot;</span>, <span class="hljs-string">&quot;x&quot;</span>, <span class="hljs-string">&quot;)&quot;</span>]), [<span class="hljs-string">&quot;f&quot;</span>, <span class="hljs-string">&quot;x&quot;</span>])
+
+    <span class="hljs-keyword">def</span> <span class="hljs-title function_">test_call_fun_no_arguments</span>(<span class="hljs-params">self</span>) -&gt; <span class="hljs-literal">None</span>:
+        <span class="hljs-keyword">with</span> self.assert_parse_error(<span class="hljs-string">&quot;Unexpected token: )&quot;</span>):
+            parse([<span class="hljs-string">&quot;f&quot;</span>, <span class="hljs-string">&quot;(&quot;</span>, <span class="hljs-string">&quot;)&quot;</span>])
+
+    <span class="hljs-keyword">def</span> <span class="hljs-title function_">test_call_fun_more_than_one_argument</span>(<span class="hljs-params">self</span>) -&gt; <span class="hljs-literal">None</span>:
+        <span class="hljs-keyword">with</span> self.assert_parse_error(<span class="hljs-string">&quot;Expected closing parenthesis in function call&quot;</span>):
+            parse([<span class="hljs-string">&quot;f&quot;</span>, <span class="hljs-string">&quot;(&quot;</span>, <span class="hljs-string">&quot;x&quot;</span>, <span class="hljs-string">&quot;y&quot;</span>, <span class="hljs-string">&quot;)&quot;</span>])
+
+    <span class="hljs-keyword">def</span> <span class="hljs-title function_">test_negate_const</span>(<span class="hljs-params">self</span>) -&gt; <span class="hljs-literal">None</span>:
+        <span class="hljs-keyword">with</span> self.assert_parse_error(<span class="hljs-string">&quot;Unexpected end of input&quot;</span>):
+            parse([<span class="hljs-string">&quot;-&quot;</span>])
+        self.assertEqual(parse([<span class="hljs-string">&quot;-&quot;</span>, <span class="hljs-number">3</span>]), [<span class="hljs-string">&quot;negate&quot;</span>, <span class="hljs-number">3</span>])
+
+    <span class="hljs-keyword">def</span> <span class="hljs-title function_">test_add</span>(<span class="hljs-params">self</span>) -&gt; <span class="hljs-literal">None</span>:
+        self.assertEqual(parse([<span class="hljs-number">1</span>, <span class="hljs-string">&quot;+&quot;</span>, <span class="hljs-number">2</span>]), [<span class="hljs-string">&quot;+&quot;</span>, <span class="hljs-number">1</span>, <span class="hljs-number">2</span>])
+
+    <span class="hljs-keyword">def</span> <span class="hljs-title function_">test_add_negate</span>(<span class="hljs-params">self</span>) -&gt; <span class="hljs-literal">None</span>:
+        self.assertEqual(parse([<span class="hljs-number">1</span>, <span class="hljs-string">&quot;+&quot;</span>, <span class="hljs-string">&quot;-&quot;</span>, <span class="hljs-number">2</span>]), [<span class="hljs-string">&quot;+&quot;</span>, <span class="hljs-number">1</span>, [<span class="hljs-string">&quot;negate&quot;</span>, <span class="hljs-number">2</span>]])
+
+    <span class="hljs-keyword">def</span> <span class="hljs-title function_">test_mul_negate</span>(<span class="hljs-params">self</span>) -&gt; <span class="hljs-literal">None</span>:
+        self.assertEqual(parse([<span class="hljs-number">1</span>, <span class="hljs-string">&quot;*&quot;</span>, <span class="hljs-string">&quot;-&quot;</span>, <span class="hljs-number">2</span>]), [<span class="hljs-string">&quot;*&quot;</span>, <span class="hljs-number">1</span>, [<span class="hljs-string">&quot;negate&quot;</span>, <span class="hljs-number">2</span>]])
+
+    <span class="hljs-keyword">def</span> <span class="hljs-title function_">test_sub_negate</span>(<span class="hljs-params">self</span>) -&gt; <span class="hljs-literal">None</span>:
+        self.assertEqual(parse([<span class="hljs-number">1</span>, <span class="hljs-string">&quot;-&quot;</span>, <span class="hljs-string">&quot;-&quot;</span>, <span class="hljs-number">2</span>]), [<span class="hljs-string">&quot;-&quot;</span>, <span class="hljs-number">1</span>, [<span class="hljs-string">&quot;negate&quot;</span>, <span class="hljs-number">2</span>]])
+
+    <span class="hljs-keyword">def</span> <span class="hljs-title function_">test_begin_add_raises</span>(<span class="hljs-params">self</span>) -&gt; <span class="hljs-literal">None</span>:
+        <span class="hljs-keyword">with</span> self.assert_parse_error(<span class="hljs-string">&quot;Unexpected operator: +&quot;</span>):
+            parse([<span class="hljs-string">&quot;+&quot;</span>])
+
+        <span class="hljs-keyword">with</span> self.assert_parse_error(<span class="hljs-string">&quot;Unexpected operator: +&quot;</span>):
+            parse([<span class="hljs-string">&quot;+&quot;</span>, <span class="hljs-number">2</span>])
+
+    <span class="hljs-keyword">def</span> <span class="hljs-title function_">test_double_add_raises</span>(<span class="hljs-params">self</span>) -&gt; <span class="hljs-literal">None</span>:
+        <span class="hljs-keyword">with</span> self.assert_parse_error(<span class="hljs-string">&quot;Unexpected operator: +&quot;</span>):
+            parse([<span class="hljs-number">1</span>, <span class="hljs-string">&quot;+&quot;</span>, <span class="hljs-string">&quot;+&quot;</span>, <span class="hljs-number">2</span>])
+
+    <span class="hljs-keyword">def</span> <span class="hljs-title function_">test_add_add</span>(<span class="hljs-params">self</span>) -&gt; <span class="hljs-literal">None</span>:
+        self.assertEqual(parse([<span class="hljs-number">1</span>, <span class="hljs-string">&quot;+&quot;</span>, <span class="hljs-number">2</span>, <span class="hljs-string">&quot;+&quot;</span>, <span class="hljs-number">3</span>]), [<span class="hljs-string">&quot;+&quot;</span>, <span class="hljs-number">1</span>, [<span class="hljs-string">&quot;+&quot;</span>, <span class="hljs-number">2</span>, <span class="hljs-number">3</span>]])
+
+    <span class="hljs-keyword">def</span> <span class="hljs-title function_">test_add_mul</span>(<span class="hljs-params">self</span>) -&gt; <span class="hljs-literal">None</span>:
+        self.assertEqual(parse([<span class="hljs-number">1</span>, <span class="hljs-string">&quot;+&quot;</span>, <span class="hljs-number">2</span>, <span class="hljs-string">&quot;*&quot;</span>, <span class="hljs-number">3</span>]), [<span class="hljs-string">&quot;+&quot;</span>, <span class="hljs-number">1</span>, [<span class="hljs-string">&quot;*&quot;</span>, <span class="hljs-number">2</span>, <span class="hljs-number">3</span>]])
+        self.assertEqual(parse([<span class="hljs-string">&quot;(&quot;</span>, <span class="hljs-number">1</span>, <span class="hljs-string">&quot;+&quot;</span>, <span class="hljs-number">2</span>, <span class="hljs-string">&quot;)&quot;</span>, <span class="hljs-string">&quot;*&quot;</span>, <span class="hljs-number">3</span>]), [<span class="hljs-string">&quot;*&quot;</span>, [<span class="hljs-string">&quot;+&quot;</span>, <span class="hljs-number">1</span>, <span class="hljs-number">2</span>], <span class="hljs-number">3</span>])
+
+    <span class="hljs-keyword">def</span> <span class="hljs-title function_">test_mul_add</span>(<span class="hljs-params">self</span>) -&gt; <span class="hljs-literal">None</span>:
+        self.assertEqual(parse([<span class="hljs-number">1</span>, <span class="hljs-string">&quot;*&quot;</span>, <span class="hljs-number">2</span>, <span class="hljs-string">&quot;+&quot;</span>, <span class="hljs-number">3</span>]), [<span class="hljs-string">&quot;+&quot;</span>, [<span class="hljs-string">&quot;*&quot;</span>, <span class="hljs-number">1</span>, <span class="hljs-number">2</span>], <span class="hljs-number">3</span>])
+
+    <span class="hljs-keyword">def</span> <span class="hljs-title function_">test_sub</span>(<span class="hljs-params">self</span>) -&gt; <span class="hljs-literal">None</span>:
+        self.assertEqual(parse([<span class="hljs-number">1</span>, <span class="hljs-string">&quot;-&quot;</span>, <span class="hljs-number">2</span>]), [<span class="hljs-string">&quot;-&quot;</span>, <span class="hljs-number">1</span>, <span class="hljs-number">2</span>])
+
+    <span class="hljs-keyword">def</span> <span class="hljs-title function_">test_sub_sub</span>(<span class="hljs-params">self</span>) -&gt; <span class="hljs-literal">None</span>:
+        self.assertEqual(parse([<span class="hljs-number">1</span>, <span class="hljs-string">&quot;-&quot;</span>, <span class="hljs-number">2</span>, <span class="hljs-string">&quot;-&quot;</span>, <span class="hljs-number">3</span>]), [<span class="hljs-string">&quot;-&quot;</span>, [<span class="hljs-string">&quot;-&quot;</span>, <span class="hljs-number">1</span>, <span class="hljs-number">2</span>], <span class="hljs-number">3</span>])
+
+    <span class="hljs-keyword">def</span> <span class="hljs-title function_">test_add_mul</span>(<span class="hljs-params">self</span>) -&gt; <span class="hljs-literal">None</span>:
+        self.assertEqual(parse([<span class="hljs-number">1</span>, <span class="hljs-string">&quot;+&quot;</span>, <span class="hljs-number">2</span>, <span class="hljs-string">&quot;*&quot;</span>, <span class="hljs-number">3</span>]), [<span class="hljs-string">&quot;+&quot;</span>, <span class="hljs-number">1</span>, [<span class="hljs-string">&quot;*&quot;</span>, <span class="hljs-number">2</span>, <span class="hljs-number">3</span>]])
+        self.assertEqual(parse([<span class="hljs-number">1</span>, <span class="hljs-string">&quot;*&quot;</span>, <span class="hljs-number">2</span>, <span class="hljs-string">&quot;+&quot;</span>, <span class="hljs-number">3</span>]), [<span class="hljs-string">&quot;+&quot;</span>, [<span class="hljs-string">&quot;*&quot;</span>, <span class="hljs-number">1</span>, <span class="hljs-number">2</span>], <span class="hljs-number">3</span>])
+
+
+<span class="hljs-keyword">if</span> __name__ == <span class="hljs-string">&quot;__main__&quot;</span>:
+    unittest.main()</pre></div></div>
+            
+        </li>
+        
+    </ul>
+  </div>
+</body>
+</html>
