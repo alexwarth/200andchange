@@ -39,10 +39,7 @@ class Matcher {
       col = this.memoTable[pos] = new Map();
     }
     if (cst !== null) {
-      col.set(ruleName, {
-        cst: cst,
-        nextPos: this.pos
-      });
+      col.set(ruleName, { cst, nextPos: this.pos });
     } else {
       col.set(ruleName, {cst: null});
     }
@@ -90,8 +87,8 @@ class Terminal {
   }
 
   eval(matcher) {
-    for (let i = 0; i < this.str.length; i++) {
-      if (!matcher.consume(this.str[i])) {
+    for (const c of this.str) {
+      if (!matcher.consume(c)) {
         return null;
       }
     }
@@ -106,9 +103,9 @@ class Choice {
 
   eval(matcher) {
     const origPos = matcher.pos;
-    for (let i = 0; i < this.exps.length; i++) {
+    for (const exp of this.exps) {
       matcher.pos = origPos;
-      const cst = this.exps[i].eval(matcher);
+      const cst = exp.eval(matcher);
       if (cst !== null) {
         return cst;
       }
@@ -124,8 +121,7 @@ class Sequence {
 
   eval(matcher) {
     const ans = [];
-    for (let i = 0; i < this.exps.length; i++) {
-      const exp = this.exps[i];
+    for (const exp of this.exps) {
       const cst = exp.eval(matcher);
       if (cst === null) {
         return null;
