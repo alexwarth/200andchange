@@ -20,8 +20,7 @@ class Matcher {
     this.input = input;
     this.pos = 0;
     this.memoTable = [];
-    const cst =
-        new RuleApplication('start').eval(this);
+    const cst = new RuleApplication('start').eval(this);
     if (this.pos === this.input.length) {
       return cst;
     }
@@ -39,7 +38,7 @@ class Matcher {
       col = this.memoTable[pos] = new Map();
     }
     if (cst !== null) {
-      col.set(ruleName, { cst, nextPos: this.pos });
+      col.set(ruleName, {cst, nextPos: this.pos});
     } else {
       col.set(ruleName, {cst: null});
     }
