@@ -27,39 +27,45 @@ class Matcher {
     return null;
   }
 
-  hasMemoizedResult(ruleName) {
-    const col = this.memoTable[this.pos];
-    return col && col.has(ruleName);
-  }
-
-  memoizeResult(pos, ruleName, cst) {
-    let col = this.memoTable[pos];
-    if (!col) {
-      col = this.memoTable[pos] = new Map();
-    }
-    if (cst !== null) {
-      col.set(ruleName, {cst, nextPos: this.pos});
-    } else {
-      col.set(ruleName, {cst: null});
-    }
-  }
-
-  useMemoizedResult(ruleName) {
-    const col = this.memoTable[this.pos];
-    const result = col.get(ruleName);
-    if (result.cst !== null) {
-      this.pos = result.nextPos;
-      return result.cst;
-    }
-    return null;
-  }
-
   consume(c) {
     if (this.input[this.pos] === c) {
       this.pos++;
       return true;
     }
     return false;
+  }
+
+  hasMemoizedResult(ruleName) {
+    return !!this.memoTableAt(this.pos)[ruleName];
+  }
+
+  useMemoizedResult(ruleName) {
+    const result = this.memoTableAt(this.pos)[ruleName];
+    this.pos = result.nextPos;
+    if (`used` in result) {
+      result.used = true; // this result is a left recursion failer!
+    }
+    return result.cst;
+  }
+
+  memoizeLRFailerAtCurrPos(ruleName) {
+    const lrFailer = {cst: null, nextPos: -1, used: false};
+    this.memoTableAt(this.pos)[ruleName] = lrFailer;
+    return lrFailer;
+  }
+
+  memoizeResult(ruleName, pos, cst) {
+    const result = {cst, nextPos: this.pos};
+    this.memoTableAt(pos)[ruleName] = result;
+    return result;
+  }
+
+  memoTableAt(pos) {
+    let memo = this.memoTable[pos];
+    if (!memo) {
+      memo = this.memoTable[pos] = new Map();
+    }
+    return memo;
   }
 }
 
@@ -69,14 +75,23 @@ class RuleApplication {
   }
 
   eval(matcher) {
-    const name = this.ruleName;
-    if (matcher.hasMemoizedResult(name)) {
-      return matcher.useMemoizedResult(name);
+    if (matcher.hasMemoizedResult(this.ruleName)) {
+      return matcher.useMemoizedResult(this.ruleName);
     }
     const origPos = matcher.pos;
-    const cst = matcher.rules[name].eval(matcher);
-    matcher.memoizeResult(origPos, name, cst);
-    return cst;
+    const lrFailer = matcher.memoizeLRFailerAtCurrPos(this.ruleName);
+    let cst = matcher.rules[this.ruleName].eval(matcher);
+    const result = matcher.memoizeResult(this.ruleName, origPos, cst);
+    if (lrFailer.used) {
+      do {
+        result.cst = cst;
+        result.nextPos = matcher.pos;
+        matcher.pos = origPos;
+        cst = matcher.rules[this.ruleName].eval(matcher);
+      } while (cst !== null && matcher.pos > result.nextPos);
+      matcher.pos = result.nextPos;
+    }
+    return result.cst;
   }
 }
 
@@ -169,4 +184,21 @@ class Repetition {
   }
 }
 
-return {Matcher, Terminal, RuleApplication, Choice, Sequence, Repetition, Not};
+// A little example w/ left recursion:
+
+// const g = new Matcher({
+//   start: new RuleApplication('mulExp'),
+//   mulExp: new Choice([
+//     new Sequence([
+//       new RuleApplication('mulExp'),
+//       new Terminal('+'),
+//       new RuleApplication('priExp'),
+//     ]),
+//     new RuleApplication('priExp'),
+//   ]),
+//   priExp: new Choice([new Terminal('pi'), new Terminal('x')]),
+// });
+
+// console.log(g.match('pi+pi+x'));
+
+// return {Matcher, Terminal, RuleApplication, Choice, Sequence, Repetition, Not};
